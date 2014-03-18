@@ -5,6 +5,7 @@ Release:	0.1
 License:	LGPL v2.1
 Group:		Libraries
 Source0:	http://cgit.freedesktop.org/beignet/snapshot/Release_v%{version}.tar.gz
+# Source0-md5:	1e054762fa4929859963d32f0987e5df
 URL:		http://www.freedesktop.org/wiki/Software/Beignet/
 BuildRequires:	Mesa-libgbm-devel
 BuildRequires:	clang-devel
