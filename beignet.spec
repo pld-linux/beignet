@@ -1,13 +1,14 @@
 Summary:	Open source implementation of the OpenCL specification for Intel GPUs
 Name:		beignet
-Version:	0.8
+Version:	0.9
 Release:	0.1
 License:	LGPL v2.1
 Group:		Libraries
 Source0:	http://cgit.freedesktop.org/beignet/snapshot/Release_v%{version}.tar.gz
-# Source0-md5:	1e054762fa4929859963d32f0987e5df
+# Source0-md5:	f7926509892f1a9ed39ffa5ae5f00691
 URL:		http://www.freedesktop.org/wiki/Software/Beignet/
 BuildRequires:	Mesa-libgbm-devel
+BuildRequires:	OpenGL-devel
 BuildRequires:	clang-devel
 BuildRequires:	cmake
 BuildRequires:	libdrm-devel
@@ -39,6 +40,9 @@ install -d build
 cd build
 %cmake \
 	-DLIB_INSTALL_DIR=%{_libdir} \
+	-DCMAKE_CXX_FLAGS_PLD="%{rpmcxxflags} -DNDEBUG -DGBE_DEBUG=0" \
+	-DCMAKE_C_FLAGS_PLD="%{rpmcxxflags} -DNDEBUG -DGBE_DEBUG=0" \
+	-DGEN_PCI_ID=0x0162 \
 	../
 %{__make}
 
@@ -59,6 +63,8 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_libdir}/%{name}
 %{_libdir}/%{name}/beignet.bc
 %attr(755,root,root) %{_libdir}/%{name}/libcl.so
+%attr(755,root,root) %{_libdir}/%{name}/libgbe.so
+%attr(755,root,root) %{_libdir}/%{name}/libgbeinterp.so
 %{_libdir}/%{name}/ocl_stdlib.h
 %{_libdir}/%{name}/ocl_stdlib.h.pch
 /etc/OpenCL/vendors/intel-beignet.icd
