@@ -1,8 +1,9 @@
 Summary:	Open source implementation of the OpenCL specification for Intel GPUs
+Summary(pl.UTF-8):	Mająca otwarte źródła implementacja specyfikacji OpenGL dla GPU formy Intel
 Name:		beignet
 Version:	0.9
 Release:	0.1
-License:	LGPL v2.1
+License:	LGPL v2+
 Group:		Libraries
 # http://cgit.freedesktop.org/beignet/snapshot/Release_v%{version}.tar.gz
 Source0:	Release_v%{version}.tar.gz
@@ -11,11 +12,15 @@ URL:		http://www.freedesktop.org/wiki/Software/Beignet/
 BuildRequires:	Mesa-libgbm-devel
 BuildRequires:	OpenGL-devel
 BuildRequires:	clang-devel
-BuildRequires:	cmake
+BuildRequires:	cmake >= 2.6.0
 BuildRequires:	libdrm-devel
-BuildRequires:	llvm
-BuildRequires:	llvm-devel
+BuildRequires:	libstdc++-devel
+BuildRequires:	llvm >= 3.3
+BuildRequires:	llvm-devel >= 3.3
 BuildRequires:	ocl-icd-devel
+BuildRequires:	pkgconfig
+BuildRequires:	python
+BuildRequires:	sed >= 4.0
 BuildRequires:	xorg-lib-libX11-devel
 BuildRequires:	xorg-lib-libXext-devel
 BuildRequires:	xorg-lib-libXfixes-devel
@@ -31,10 +36,21 @@ implements the OpenCL host functions required to initialize the
 device, create the command queues, the kernels and the programs and
 run them on the GPU.
 
+%description -l pl.UTF-8
+Beignet to mająca otwarte źródła implementacja specyfikacji OpenCL -
+ogólnego API przeznaczonego do obliczeń. Ten pakiet zawiera kod do
+uruchamiania programów OpenCL na procesorach graficznych (GPU) firmy
+Intel; kod ten zasadniczo definiuje i implementuje funkcje hosta
+OpenCL wymagane do zainicjowania urządzenia, tworzenia kolejek
+poleceń, jądra i programów oraz uruchamia je na GPU.
+
 %prep
 %setup -qc
 mv Release_v%{version}/{*,.*} .
 rmdir Release_v%{version}
+
+# allow to override CMAKE_VERBOSE_MAKEFILE
+%{__sed} -i -e '/^SET(CMAKE_VERBOSE_MAKEFILE "false")/d' CMakeLists.txt
 
 %build
 install -d build
@@ -53,7 +69,7 @@ rm -rf $RPM_BUILD_ROOT
 %{__make} -C build install \
 	DESTDIR=$RPM_BUILD_ROOT
 
-rm -r $RPM_BUILD_ROOT%{_includedir}
+%{__rm} -r $RPM_BUILD_ROOT%{_includedir}
 
 %clean
 rm -rf $RPM_BUILD_ROOT
