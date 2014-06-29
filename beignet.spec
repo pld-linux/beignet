@@ -2,7 +2,7 @@ Summary:	Open source implementation of the OpenCL specification for Intel GPUs
 Summary(pl.UTF-8):	Mająca otwarte źródła implementacja specyfikacji OpenGL dla GPU formy Intel
 Name:		beignet
 Version:	0.9
-Release:	0.1
+Release:	1
 License:	LGPL v2+
 Group:		Libraries
 # http://cgit.freedesktop.org/beignet/snapshot/Release_v%{version}.tar.gz
