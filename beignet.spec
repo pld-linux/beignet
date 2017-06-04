@@ -18,6 +18,8 @@ License:	LGPL v2+
 Group:		Libraries
 Source0:	https://01.org/sites/default/files/beignet-%{version}-source.tar.gz
 # Source0-md5:	850886a71a34672ca26a42046d0bb442
+Patch0:		cflags.patch
+Patch1:		static_llvm.patch
 URL:		http://www.freedesktop.org/wiki/Software/Beignet/
 BuildRequires:	Mesa-libgbm-devel
 BuildRequires:	Mesa-libEGL-devel
@@ -60,8 +62,9 @@ poleceń, jądra i programów oraz uruchamia je na GPU.
 %prep
 %setup -qn Beignet-%{version}-Source
 
-# allow to override CMAKE_VERBOSE_MAKEFILE
-%{__sed} -i -e '/^SET(CMAKE_VERBOSE_MAKEFILE "false")/d' CMakeLists.txt
+%patch0 -p1
+%patch1 -p1
+
 
 %build
 install -d build
@@ -93,6 +96,8 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %{_libdir}/%{name}/libcl.so
 %attr(755,root,root) %{_libdir}/%{name}/libgbe.so
 %attr(755,root,root) %{_libdir}/%{name}/libgbeinterp.so
-%{_libdir}/%{name}/ocl_stdlib.h
-%{_libdir}/%{name}/ocl_stdlib.h.pch
+%{_libdir}/%{name}/beignet.pch
+%{_libdir}/%{name}/beignet_20.bc
+%{_libdir}/%{name}/beignet_20.pch
+%{_libdir}/%{name}/include
 /etc/OpenCL/vendors/intel-beignet.icd
