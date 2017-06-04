@@ -1,29 +1,42 @@
+#
+# TODO:
+#	- make it build with our LLVM
+#
+
+# Conditional build:
+%bcond_with	host_pci_id	# build specifically for the build host
+
+# by default build kernel for Intel Ivybridge
+%define		gen_pci_id	0x0162
+
 Summary:	Open source implementation of the OpenCL specification for Intel GPUs
 Summary(pl.UTF-8):	Mająca otwarte źródła implementacja specyfikacji OpenGL dla GPU formy Intel
 Name:		beignet
-Version:	0.9
-Release:	1
+Version:	1.3.1
+Release:	0.1
 License:	LGPL v2+
 Group:		Libraries
-# http://cgit.freedesktop.org/beignet/snapshot/Release_v%{version}.tar.gz
-Source0:	Release_v%{version}.tar.gz
-# Source0-md5:	f7926509892f1a9ed39ffa5ae5f00691
+Source0:	https://01.org/sites/default/files/beignet-%{version}-source.tar.gz
+# Source0-md5:	850886a71a34672ca26a42046d0bb442
 URL:		http://www.freedesktop.org/wiki/Software/Beignet/
 BuildRequires:	Mesa-libgbm-devel
+BuildRequires:	Mesa-libEGL-devel
 BuildRequires:	OpenGL-devel
 BuildRequires:	clang-devel
 BuildRequires:	cmake >= 2.6.0
 BuildRequires:	libdrm-devel
+BuildRequires:	libedit-devel
 BuildRequires:	libstdc++-devel
-BuildRequires:	llvm >= 3.3
-BuildRequires:	llvm-devel >= 3.3
+BuildRequires:	llvm >= 3.6
+BuildRequires:	llvm-devel >= 3.6
+BuildRequires:	ncurses-devel
 BuildRequires:	ocl-icd-devel
 BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	sed >= 4.0
-BuildRequires:	xorg-lib-libX11-devel
 BuildRequires:	xorg-lib-libXext-devel
 BuildRequires:	xorg-lib-libXfixes-devel
+BuildRequires:	zlib-devel
 Provides:	ocl-icd(beignet)
 Provides:	ocl-icd-driver
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
@@ -45,9 +58,7 @@ OpenCL wymagane do zainicjowania urządzenia, tworzenia kolejek
 poleceń, jądra i programów oraz uruchamia je na GPU.
 
 %prep
-%setup -qc
-mv Release_v%{version}/{*,.*} .
-rmdir Release_v%{version}
+%setup -qn Beignet-%{version}-Source
 
 # allow to override CMAKE_VERBOSE_MAKEFILE
 %{__sed} -i -e '/^SET(CMAKE_VERBOSE_MAKEFILE "false")/d' CMakeLists.txt
@@ -59,7 +70,7 @@ cd build
 	-DLIB_INSTALL_DIR=%{_libdir} \
 	-DCMAKE_CXX_FLAGS_PLD="%{rpmcxxflags} -DNDEBUG -DGBE_DEBUG=0" \
 	-DCMAKE_C_FLAGS_PLD="%{rpmcxxflags} -DNDEBUG -DGBE_DEBUG=0" \
-	-DGEN_PCI_ID=0x0162 \
+	-DGEN_PCI_ID=%{gen_pci_id} \
 	../
 %{__make}
 
