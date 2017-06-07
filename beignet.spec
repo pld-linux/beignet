@@ -1,14 +1,3 @@
-#
-# TODO:
-#	- make it build with our LLVM
-#
-
-# Conditional build:
-%bcond_with	host_pci_id	# build specifically for the build host
-
-# by default build kernel for Intel Ivybridge
-%define		gen_pci_id	0x0162
-
 Summary:	Open source implementation of the OpenCL specification for Intel GPUs
 Summary(pl.UTF-8):	Mająca otwarte źródła implementacja specyfikacji OpenGL dla GPU formy Intel
 Name:		beignet
@@ -73,7 +62,6 @@ cd build
 	-DLIB_INSTALL_DIR=%{_libdir} \
 	-DCMAKE_CXX_FLAGS_PLD="%{rpmcxxflags} -DNDEBUG -DGBE_DEBUG=0" \
 	-DCMAKE_C_FLAGS_PLD="%{rpmcxxflags} -DNDEBUG -DGBE_DEBUG=0" \
-	-DGEN_PCI_ID=%{gen_pci_id} \
 	../
 %{__make}
 
