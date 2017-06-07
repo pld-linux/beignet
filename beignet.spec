@@ -85,7 +85,9 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %{_libdir}/%{name}/libgbe.so
 %attr(755,root,root) %{_libdir}/%{name}/libgbeinterp.so
 %{_libdir}/%{name}/beignet.pch
+%ifarch %{x8664}
 %{_libdir}/%{name}/beignet_20.bc
 %{_libdir}/%{name}/beignet_20.pch
+%endif
 %{_libdir}/%{name}/include
 /etc/OpenCL/vendors/intel-beignet.icd
