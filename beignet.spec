@@ -26,11 +26,11 @@ BuildRequires:	Mesa-libEGL-devel
 BuildRequires:	OpenGL-devel
 BuildRequires:	clang-devel
 BuildRequires:	cmake >= 2.6.0
-BuildRequires:	libdrm-devel
+BuildRequires:	libdrm-devel >= 2.4.66
 BuildRequires:	libedit-devel
 BuildRequires:	libstdc++-devel
-BuildRequires:	llvm >= 3.6
-BuildRequires:	llvm-devel >= 3.6
+BuildRequires:	llvm >= 3.9
+BuildRequires:	llvm-devel >= 3.9
 BuildRequires:	ncurses-devel
 BuildRequires:	ocl-icd-devel
 BuildRequires:	pkgconfig
