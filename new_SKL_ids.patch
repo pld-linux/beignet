@@ -1,0 +1,39 @@
+diff --git a/src/cl_device_data.h b/src/cl_device_data.h
+index c3d6c45..123b619 100644
+--- a/src/cl_device_data.h
++++ b/src/cl_device_data.h
+@@ -247,7 +247,9 @@
+ /* SKL */
+ #define PCI_CHIP_SKYLAKE_ULT_GT1	0x1906   /* Intel(R) Skylake ULT - GT1 */
+ #define PCI_CHIP_SKYLAKE_ULT_GT2	0x1916   /* Intel(R) Skylake ULT - GT2 */
+-#define PCI_CHIP_SKYLAKE_ULT_GT3	0x1926   /* Intel(R) Skylake ULT - GT3 */
++#define PCI_CHIP_SKYLAKE_ULT_GT3	0x1923   /* Intel(R) Skylake ULT - GT3 */
++#define PCI_CHIP_SKYLAKE_ULT_GT3E1	0x1926   /* Intel(R) Skylake ULT - GT3E */
++#define PCI_CHIP_SKYLAKE_ULT_GT3E2	0x1927   /* Intel(R) Skylake ULT - GT3E */
+ #define PCI_CHIP_SKYLAKE_ULT_GT2F	0x1921   /* Intel(R) Skylake ULT - GT2F */
+ #define PCI_CHIP_SKYLAKE_ULX_GT1	0x190E   /* Intel(R) Skylake ULX - GT1 */
+ #define PCI_CHIP_SKYLAKE_ULX_GT2	0x191E   /* Intel(R) Skylake ULX - GT2 */
+@@ -284,6 +286,8 @@
+ 
+ #define IS_SKL_GT3(devid)               \
+   (devid == PCI_CHIP_SKYLAKE_ULT_GT3 ||   \
++   devid == PCI_CHIP_SKYLAKE_ULT_GT3E1 ||   \
++   devid == PCI_CHIP_SKYLAKE_ULT_GT3E2 ||   \
+    devid == PCI_CHIP_SKYLAKE_HALO_GT3 || \
+    devid == PCI_CHIP_SKYLAKE_SRV_GT3 || \
+    devid == PCI_CHIP_SKYLAKE_MEDIA_SRV_GT3)
+diff --git a/src/cl_device_id.c b/src/cl_device_id.c
+index 76549a4..b9a60bb 100644
+--- a/src/cl_device_id.c
++++ b/src/cl_device_id.c
+@@ -605,6 +605,10 @@ skl_gt2_break:
+ 
+     case PCI_CHIP_SKYLAKE_ULT_GT3:
+       DECL_INFO_STRING(skl_gt3_break, intel_skl_gt3_device, name, "Intel(R) HD Graphics Skylake ULT GT3");
++    case PCI_CHIP_SKYLAKE_ULT_GT3E1:
++      DECL_INFO_STRING(skl_gt3_break, intel_skl_gt3_device, name, "Intel(R) HD Graphics Skylake ULT GT3E");
++    case PCI_CHIP_SKYLAKE_ULT_GT3E2:
++      DECL_INFO_STRING(skl_gt3_break, intel_skl_gt3_device, name, "Intel(R) HD Graphics Skylake ULT GT3E");
+     case PCI_CHIP_SKYLAKE_HALO_GT3:
+       DECL_INFO_STRING(skl_gt3_break, intel_skl_gt3_device, name, "Intel(R) HD Graphics Skylake Halo GT3");
+     case PCI_CHIP_SKYLAKE_SRV_GT3:
