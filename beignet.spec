@@ -1,20 +1,18 @@
 Summary:	Open source implementation of the OpenCL specification for Intel GPUs
 Summary(pl.UTF-8):	Mająca otwarte źródła implementacja specyfikacji OpenCL dla GPU formy Intel
 Name:		beignet
-Version:	1.3.1
-Release:	3
+Version:	1.3.2
+Release:	0.1
 License:	LGPL v2+
 Group:		Libraries
+#Source0Download: https://www.freedesktop.org/wiki/Software/Beignet/NEWS/
 Source0:	https://01.org/sites/default/files/beignet-%{version}-source.tar.gz
-# Source0-md5:	850886a71a34672ca26a42046d0bb442
+# Source0-md5:	a577ab18d67a891c8767b8ea62253543
 Patch0:		cflags.patch
 Patch1:		static_llvm.patch
-Patch2:		new_SKL_ids.patch
-Patch3:		llvm-3.8.patch
-URL:		http://www.freedesktop.org/wiki/Software/Beignet/
+URL:		https://www.freedesktop.org/wiki/Software/Beignet/
+BuildRequires:	EGL-devel
 BuildRequires:	Mesa-libgbm-devel
-BuildRequires:	Mesa-libGL-devel >= 13.0.0
-BuildRequires:	Mesa-libEGL-devel >= 13.0.0
 BuildRequires:	OpenGL-devel
 BuildRequires:	clang-devel >= 3.9
 BuildRequires:	cmake >= 2.6.0
@@ -26,6 +24,8 @@ BuildRequires:	llvm-devel >= 3.9
 BuildRequires:	ncurses-devel
 BuildRequires:	ocl-icd-devel
 BuildRequires:	pkgconfig
+BuildRequires:	pkgconfig(egl) >= 13.0.0
+BuildRequires:	pkgconfig(gl) >= 13.0.0
 BuildRequires:	python
 BuildRequires:	sed >= 4.0
 BuildRequires:	xorg-lib-libX11-devel
@@ -56,8 +56,11 @@ poleceń, jądra i programów oraz uruchamia je na GPU.
 %setup -qn Beignet-%{version}-Source
 %patch0 -p1
 %patch1 -p1
-%patch2 -p1
-%patch3 -p1
+
+# don't lower default -std= on g++ 5+ (recent llvm requires C++14)
+%if "%{_ver_ge '%{cxx_version}' '5.0'}" == "1"
+%{__sed} -i -e 's/ -std=c++0x / /' CMakeLists.txt
+%endif
 
 %build
 install -d build
