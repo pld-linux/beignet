@@ -10,6 +10,28 @@ Source0:	https://01.org/sites/default/files/beignet-%{version}-source.tar.gz
 # Source0-md5:	a577ab18d67a891c8767b8ea62253543
 Patch0:		cflags.patch
 Patch1:		static_llvm.patch
+# Debian patches
+Patch10:	%{name}-reduce-notfound-output.patch
+Patch11:	%{name}-update-docs.patch
+Patch12:	%{name}-docs-broken-links.patch
+Patch13:	%{name}-cl_accelerator_intel.patch
+Patch14:	%{name}-grammar.patch
+Patch15:	%{name}-clearer-type-errors.patch
+Patch16:	%{name}-debian-885423.patch
+Patch17:	%{name}-disable-wayland-warning.patch
+Patch18:	%{name}-eventchain-memory-leak.patch
+Patch19:	%{name}-llvm6-support.patch
+Patch20:	%{name}-llvm7-support.patch
+Patch21:	%{name}-accept-old-create-queue.patch
+Patch22:	%{name}-reduce-notfound-output2.patch
+Patch23:	%{name}-coffeelake.patch
+Patch24:	%{name}-in-order-queue.patch
+Patch25:	%{name}-accept-ignore--g.patch
+Patch26:	%{name}-llvm8-support.patch
+Patch27:	%{name}-llvm9-support.patch
+Patch28:	%{name}-cometlake.patch
+# modified
+Patch29:	%{name}-llvm10-support.patch
 URL:		https://www.freedesktop.org/wiki/Software/Beignet/
 BuildRequires:	EGL-devel
 BuildRequires:	Mesa-libgbm-devel
@@ -56,6 +78,26 @@ poleceń, jądra i programów oraz uruchamia je na GPU.
 %setup -qn Beignet-%{version}-Source
 %patch0 -p1
 %patch1 -p1
+%patch10 -p1
+%patch11 -p1
+%patch12 -p1
+%patch13 -p1
+%patch14 -p1
+%patch15 -p1
+%patch16 -p1
+%patch17 -p1
+%patch18 -p1
+%patch19 -p1
+%patch20 -p1
+%patch21 -p1
+%patch22 -p1
+%patch23 -p1
+%patch24 -p1
+%patch25 -p1
+%patch26 -p1
+%patch27 -p1
+%patch28 -p1
+%patch29 -p1
 
 # don't lower default -std= on g++ 5+ (recent llvm requires C++14)
 %if "%{_ver_ge '%{cxx_version}' '5.0'}" == "1"
