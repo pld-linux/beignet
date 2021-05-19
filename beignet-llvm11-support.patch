@@ -1,0 +1,991 @@
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_includes.hpp.orig	2021-05-16 18:47:43.370592614 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_includes.hpp	2021-05-16 20:13:29.672712703 +0200
+@@ -103,7 +103,11 @@
+ 
+ #if LLVM_VERSION_MAJOR * 10 + LLVM_VERSION_MINOR >= 35
+ #include "llvm/IR/Mangler.h"
++#if LLVM_VERSION_MAJOR >= 11
++#include "llvm/IR/AbstractCallSite.h"
++#else
+ #include "llvm/IR/CallSite.h"
++#endif
+ #include "llvm/IR/CFG.h"
+ #include "llvm/IR/InstVisitor.h"
+ #include "llvm/IR/IRPrintingPasses.h"
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_sampler_fix.cpp.orig	2021-05-16 20:31:12.343622387 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_sampler_fix.cpp	2021-05-16 20:31:16.373600555 +0200
+@@ -45,8 +45,12 @@
+     bool visitCallInst(CallInst *I) {
+       if(!I)
+         return false;
++#if LLVM_VERSION_MAJOR >= 11
++      Value *Callee = I->getCalledOperand();
++#else
+       Value *Callee = I->getCalledValue();
+-      const std::string fnName = Callee->getName();
++#endif
++      auto fnName = Callee->getName();
+       bool changed = false;
+       Type *boolTy = IntegerType::get(I->getContext(), 1);
+       Type *i32Ty = IntegerType::get(I->getContext(), 32);
+@@ -59,7 +63,11 @@
+         Value *needFixVal;
+ #if LLVM_VERSION_MAJOR * 10 + LLVM_VERSION_MINOR >= 40
+         CallInst *init = dyn_cast<CallInst>(I->getOperand(0));
++#if LLVM_VERSION_MAJOR >= 11
++        if (init && init->getCalledOperand()->getName().compare("__translate_sampler_initializer"))
++#else
+         if (init && init->getCalledValue()->getName().compare("__translate_sampler_initializer"))
++#endif
+         {
+           const ConstantInt *ci = dyn_cast<ConstantInt>(init->getOperand(0));
+           uint32_t samplerInt = ci->getZExtValue();
+@@ -113,7 +121,11 @@
+         Value *needFixVal;
+  #if LLVM_VERSION_MAJOR * 10 + LLVM_VERSION_MINOR >= 40
+         CallInst *init = dyn_cast<CallInst>(I->getOperand(0));
++#if LLVM_VERSION_MAJOR >= 11
++        if (init && init->getCalledOperand()->getName().compare("__translate_sampler_initializer"))
++#else
+         if (init && init->getCalledValue()->getName().compare("__translate_sampler_initializer"))
++#endif
+         {
+           const ConstantInt *ci = dyn_cast<ConstantInt>(init->getOperand(0));
+           uint32_t samplerInt = ci->getZExtValue();
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_bitcode_link.cpp.orig	2021-05-16 18:47:43.370592614 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_bitcode_link.cpp	2021-05-16 20:35:03.445703733 +0200
+@@ -97,8 +97,11 @@
+ 
+         if (callFunc && callFunc->getIntrinsicID() != 0)
+           continue;
+-
++#if LLVM_VERSION_MAJOR >= 11
++        std::string fnName = call->getCalledOperand()->stripPointerCasts()->getName().str();
++#else
+         std::string fnName = call->getCalledValue()->stripPointerCasts()->getName();
++#endif
+ 
+         if (!MFS.insert(fnName).second) {
+           continue;
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_gen_backend.cpp.orig	2021-05-16 18:47:43.443925550 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_gen_backend.cpp	2021-05-17 16:41:07.490340725 +0200
+@@ -376,7 +376,12 @@
+           GBE_ASSERT(index == 0);
+           return this->_newScalar(value, key, type, index, uniform);
+           break;
++#if LLVM_VERSION_MAJOR >= 11
++        case Type::FixedVectorTyID:
++        case Type::ScalableVectorTyID:
++#else
+         case Type::VectorTyID:
++#endif
+         {
+           auto vectorType = cast<VectorType>(type);
+           auto elementType = vectorType->getElementType();
+@@ -743,20 +748,20 @@
+ #undef DECL_VISIT_FN
+ 
+     // Emit rounding instructions from gen native function
+-    void emitRoundingCallInst(CallInst &I, CallSite &CS, ir::Opcode opcode);
++    void emitRoundingCallInst(CallInst &I, CallBase &CB, ir::Opcode opcode);
+     // Emit unary instructions from gen native function
+-    void emitUnaryCallInst(CallInst &I, CallSite &CS, ir::Opcode opcode, ir::Type = ir::TYPE_FLOAT);
++    void emitUnaryCallInst(CallInst &I, CallBase &CB, ir::Opcode opcode, ir::Type = ir::TYPE_FLOAT);
+     // Emit unary instructions from gen native function
+-    void emitAtomicInst(CallInst &I, CallSite &CS, ir::AtomicOps opcode);
++    void emitAtomicInst(CallInst &I, CallBase &CB, ir::AtomicOps opcode);
+     // Emit workgroup instructions
+-    void emitWorkGroupInst(CallInst &I, CallSite &CS, ir::WorkGroupOps opcode);
++    void emitWorkGroupInst(CallInst &I, CallBase &CB, ir::WorkGroupOps opcode);
+     // Emit subgroup instructions
+-    void emitSubGroupInst(CallInst &I, CallSite &CS, ir::WorkGroupOps opcode);
++    void emitSubGroupInst(CallInst &I, CallBase &CB, ir::WorkGroupOps opcode);
+     // Emit subgroup instructions
+-    void emitBlockReadWriteMemInst(CallInst &I, CallSite &CS, bool isWrite, uint8_t vec_size, ir::Type = ir::TYPE_U32);
+-    void emitBlockReadWriteImageInst(CallInst &I, CallSite &CS, bool isWrite, uint8_t vec_size, ir::Type = ir::TYPE_U32);
++    void emitBlockReadWriteMemInst(CallInst &I, CallBase &CB, bool isWrite, uint8_t vec_size, ir::Type = ir::TYPE_U32);
++    void emitBlockReadWriteImageInst(CallInst &I, CallBase &CB, bool isWrite, uint8_t vec_size, ir::Type = ir::TYPE_U32);
+ 
+-    uint8_t appendSampler(CallSite::arg_iterator AI);
++    uint8_t appendSampler(User::op_iterator AI);
+     uint8_t getImageID(CallInst &I);
+ 
+     // These instructions are not supported at all
+@@ -1320,13 +1325,13 @@
+ #endif
+ 
+       if(typeNameNode) {
+-        llvmInfo.typeName= (cast<MDString>(typeNameNode->getOperand(opID)))->getString();
++        llvmInfo.typeName= (cast<MDString>(typeNameNode->getOperand(opID)))->getString().str();
+       }
+       if(typeBaseNameNode) {
+-        llvmInfo.typeBaseName= (cast<MDString>(typeBaseNameNode->getOperand(opID)))->getString();
++        llvmInfo.typeBaseName= (cast<MDString>(typeBaseNameNode->getOperand(opID)))->getString().str();
+       }
+-      llvmInfo.typeName= (cast<MDString>(typeNameNode->getOperand(opID)))->getString();
+-      llvmInfo.typeQual = (cast<MDString>(typeQualNode->getOperand(opID)))->getString();
++      llvmInfo.typeName= (cast<MDString>(typeNameNode->getOperand(opID)))->getString().str();
++      llvmInfo.typeQual = (cast<MDString>(typeQualNode->getOperand(opID)))->getString().str();
+       bool isImage = llvmInfo.isImageType();
+       bool isPipe = llvmInfo.isPipeType();
+       if (I->getType()->isPointerTy() || isImage || isPipe) {
+@@ -1531,7 +1536,7 @@
+             EltTy = getEltType(EltTy, TypeIndex);
+         }
+ 
+-        ir::Constant cc = unit.getConstantSet().getConstant(pointer->getName());
++        ir::Constant cc = unit.getConstantSet().getConstant(pointer->getName().str());
+         unsigned int defOffset = cc.getOffset();
+         relocs.push_back(ir::RelocEntry(offset, defOffset + constantOffset));
+ 
+@@ -1546,7 +1551,7 @@
+       return;
+     }
+     if (isa<GlobalVariable>(c)) {
+-      ir::Constant cc = unit.getConstantSet().getConstant(c->getName());
++      ir::Constant cc = unit.getConstantSet().getConstant(c->getName().str());
+       unsigned int defOffset = cc.getOffset();
+ 
+       relocs.push_back(ir::RelocEntry(offset, defOffset));
+@@ -1609,7 +1614,12 @@
+           }
+           break;
+         }
++#if LLVM_VERSION_MAJOR >= 11
++      case Type::TypeID::FixedVectorTyID:
++      case Type::TypeID::ScalableVectorTyID:
++#else
+       case Type::TypeID::VectorTyID:
++#endif
+         {
+           const ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c);
+           const VectorType *vecTy = cast<VectorType>(type);
+@@ -1936,7 +1946,12 @@
+       case Type::PointerTyID:
+         regTranslator.newScalar(value, key, 0, uniform);
+         break;
++#if LLVM_VERSION_MAJOR >= 11
++      case Type::TypeID::FixedVectorTyID:
++      case Type::TypeID::ScalableVectorTyID:
++#else
+       case Type::VectorTyID:
++#endif
+       {
+         auto vectorType = cast<VectorType>(type);
+         const uint32_t elemNum = vectorType->getNumElements();
+@@ -2395,7 +2410,7 @@
+ #endif
+         }
+         if(typeNameNode) {
+-          llvmInfo.typeName = (cast<MDString>(typeNameNode->getOperand(opID)))->getString();
++          llvmInfo.typeName = (cast<MDString>(typeNameNode->getOperand(opID)))->getString().str();
+           //LLVM 3.9 image's type name include access qual, don't match OpenCL spec, erase them.
+           std::vector<std::string> filters = {"__read_only ", "__write_only "};
+           for (uint32_t i = 0; i < filters.size(); i++) {
+@@ -2406,16 +2421,16 @@
+           }
+         }
+         if(typeBaseNameNode){
+-          llvmInfo.typeBaseName = (cast<MDString>(typeBaseNameNode->getOperand(opID)))->getString();
++          llvmInfo.typeBaseName = (cast<MDString>(typeBaseNameNode->getOperand(opID)))->getString().str();
+         }
+         if(accessQualNode) {
+-          llvmInfo.accessQual = (cast<MDString>(accessQualNode->getOperand(opID)))->getString();
++          llvmInfo.accessQual = (cast<MDString>(accessQualNode->getOperand(opID)))->getString().str();
+         }
+         if(typeQualNode) {
+-          llvmInfo.typeQual = (cast<MDString>(typeQualNode->getOperand(opID)))->getString();
++          llvmInfo.typeQual = (cast<MDString>(typeQualNode->getOperand(opID)))->getString().str();
+         }
+         if(argNameNode){
+-          llvmInfo.argName = (cast<MDString>(argNameNode->getOperand(opID)))->getString();
++          llvmInfo.argName = (cast<MDString>(argNameNode->getOperand(opID)))->getString().str();
+         }
+ 
+         // function arguments are uniform values.
+@@ -3010,7 +3025,7 @@
+         } else {
+           this->newRegister(const_cast<GlobalVariable*>(&v));
+           ir::Register reg = regTranslator.getScalar(const_cast<GlobalVariable*>(&v), 0);
+-          ir::Constant &con = unit.getConstantSet().getConstant(v.getName());
++          ir::Constant &con = unit.getConstantSet().getConstant(v.getName().str());
+           if (!legacyMode) {
+             ir::Register regload = ctx.reg(getFamily(getType(ctx, v.getType())));
+             ctx.LOADI(getType(ctx, v.getType()), regload, ctx.newIntegerImmediate(con.getOffset(), getType(ctx, v.getType())));
+@@ -3212,7 +3227,7 @@
+         GBE_ASSERTM(false, "Unsupported calling convention");
+     }
+ 
+-    ctx.startFunction(F.getName());
++    ctx.startFunction(F.getName().str());
+ 
+     ir::Function &fn = ctx.getFunction();
+     this->regTranslator.clear();
+@@ -3810,9 +3825,14 @@
+ 
+   void GenWriter::regAllocateCallInst(CallInst &I) {
+     Value *dst = &I;
++#if LLVM_VERSION_MAJOR >= 11
++    Value *Callee = I.getCalledOperand();
++    GBE_ASSERT(isa<InlineAsm>(I.getCalledOperand()) == false);
++#else
+     Value *Callee = I.getCalledValue();
+-    GBE_ASSERT(ctx.getFunction().getProfile() == ir::PROFILE_OCL);
+     GBE_ASSERT(isa<InlineAsm>(I.getCalledValue()) == false);
++#endif
++    GBE_ASSERT(ctx.getFunction().getProfile() == ir::PROFILE_OCL);
+     if(I.getNumArgOperands()) GBE_ASSERT(I.hasStructRetAttr() == false);
+ 
+     // We only support a small number of intrinsics right now
+@@ -3870,7 +3890,7 @@
+       }
+     }
+     // Get the name of the called function and handle it
+-    const std::string fnName = Callee->stripPointerCasts()->getName();
++    const std::string fnName = Callee->stripPointerCasts()->getName().str();
+     auto genIntrinsicID = intrinsicMap.find(fnName);
+     switch (genIntrinsicID) {
+       case GEN_OCL_GET_GROUP_ID0:
+@@ -4166,7 +4186,7 @@
+     };
+   }
+ 
+-  void GenWriter::emitRoundingCallInst(CallInst &I, CallSite &CS, ir::Opcode opcode) {
++  void GenWriter::emitRoundingCallInst(CallInst &I, CallBase &CB, ir::Opcode opcode) {
+     if (I.getType()->isHalfTy()) {
+       const ir::Register src = this->getRegister(I.getOperand(0));
+       const ir::Register srcFloat = ctx.reg(ir::FAMILY_DWORD);
+@@ -4177,14 +4197,14 @@
+       ctx.F32TO16(ir::TYPE_U16, ir::TYPE_FLOAT, dst, dstFloat);
+     } else {
+       GBE_ASSERT(I.getType()->isFloatTy());
+-      this->emitUnaryCallInst(I,CS,opcode);
++      this->emitUnaryCallInst(I,CB,opcode);
+     }
+   }
+ 
+-  void GenWriter::emitUnaryCallInst(CallInst &I, CallSite &CS, ir::Opcode opcode, ir::Type type) {
+-    CallSite::arg_iterator AI = CS.arg_begin();
++  void GenWriter::emitUnaryCallInst(CallInst &I, CallBase &CB, ir::Opcode opcode, ir::Type type) {
++    auto AI = CB.arg_begin();
+ #if GBE_DEBUG
+-    CallSite::arg_iterator AE = CS.arg_end();
++    auto AE = CB.arg_end();
+ #endif /* GBE_DEBUG */
+     GBE_ASSERT(AI != AE);
+     const ir::Register src = this->getRegister(*AI);
+@@ -4293,9 +4313,9 @@
+     this->emitAtomicInstHelper(opcode, type, dst, llvmPtr, payloadTuple);
+   }
+ 
+-  void GenWriter::emitAtomicInst(CallInst &I, CallSite &CS, ir::AtomicOps opcode) {
+-    CallSite::arg_iterator AI = CS.arg_begin();
+-    CallSite::arg_iterator AE = CS.arg_end();
++  void GenWriter::emitAtomicInst(CallInst &I, CallBase &CB, ir::AtomicOps opcode) {
++    auto AI = CB.arg_begin();
++    auto AE = CB.arg_end();
+     GBE_ASSERT(AI != AE);
+     Value *llvmPtr = *AI;
+     ir::AddressSpace addrSpace = addressSpaceLLVMToGen(llvmPtr->getType()->getPointerAddressSpace());
+@@ -4348,7 +4368,7 @@
+     }
+   }
+ 
+-  void GenWriter::emitWorkGroupInst(CallInst &I, CallSite &CS, ir::WorkGroupOps opcode) {
++  void GenWriter::emitWorkGroupInst(CallInst &I, CallBase &CB, ir::WorkGroupOps opcode) {
+     ir::Function &f = ctx.getFunction();
+ 
+     if (f.getwgBroadcastSLM() < 0 && opcode == ir::WORKGROUP_OP_BROADCAST) {
+@@ -4378,8 +4398,8 @@
+       GBE_ASSERT(f.gettidMapSLM() >= 0);
+     }
+ 
+-    CallSite::arg_iterator AI = CS.arg_begin();
+-    CallSite::arg_iterator AE = CS.arg_end();
++    auto AI = CB.arg_begin();
++    auto AE = CB.arg_end();
+     GBE_ASSERT(AI != AE);
+ 
+     if (opcode == ir::WORKGROUP_OP_ALL || opcode == ir::WORKGROUP_OP_ANY) {
+@@ -4391,14 +4411,14 @@
+       const ir::Tuple srcTuple = ctx.arrayTuple(&src[0], 3);
+       ctx.WORKGROUP(opcode, (uint32_t)f.gettidMapSLM(), getRegister(&I), srcTuple, 3, ir::TYPE_S32);
+     } else if (opcode == ir::WORKGROUP_OP_BROADCAST) {
+-      int argNum = CS.arg_size();
++      int argNum = CB.arg_size();
+       std::vector<ir::Register> src(argNum);
+       for (int i = 0; i < argNum; i++) {
+         src[i] = this->getRegister(*(AI++));
+       }
+       const ir::Tuple srcTuple = ctx.arrayTuple(&src[0], argNum);
+       ctx.WORKGROUP(ir::WORKGROUP_OP_BROADCAST, (uint32_t)f.getwgBroadcastSLM(), getRegister(&I), srcTuple, argNum,
+-          getType(ctx, (*CS.arg_begin())->getType()));
++          getType(ctx, (*CB.arg_begin())->getType()));
+     } else {
+       ConstantInt *sign = dyn_cast<ConstantInt>(AI);
+       GBE_ASSERT(sign);
+@@ -4423,9 +4443,9 @@
+     GBE_ASSERT(AI == AE);
+   }
+ 
+-  void GenWriter::emitSubGroupInst(CallInst &I, CallSite &CS, ir::WorkGroupOps opcode) {
+-    CallSite::arg_iterator AI = CS.arg_begin();
+-    CallSite::arg_iterator AE = CS.arg_end();
++  void GenWriter::emitSubGroupInst(CallInst &I, CallBase &CB, ir::WorkGroupOps opcode) {
++    auto AI = CB.arg_begin();
++    auto AE = CB.arg_end();
+     GBE_ASSERT(AI != AE);
+ 
+     if (opcode == ir::WORKGROUP_OP_ALL || opcode == ir::WORKGROUP_OP_ANY) {
+@@ -4435,7 +4455,7 @@
+       const ir::Tuple srcTuple = ctx.arrayTuple(&src[0], 1);
+       ctx.SUBGROUP(opcode, getRegister(&I), srcTuple, 1, ir::TYPE_S32);
+     } else if (opcode == ir::WORKGROUP_OP_BROADCAST) {
+-      int argNum = CS.arg_size();
++      int argNum = CB.arg_size();
+       GBE_ASSERT(argNum == 2);
+       std::vector<ir::Register> src(argNum);
+       for (int i = 0; i < argNum; i++) {
+@@ -4443,7 +4463,7 @@
+       }
+       const ir::Tuple srcTuple = ctx.arrayTuple(&src[0], argNum);
+       ctx.SUBGROUP(ir::WORKGROUP_OP_BROADCAST, getRegister(&I), srcTuple, argNum,
+-          getType(ctx, (*CS.arg_begin())->getType()));
++          getType(ctx, (*CB.arg_begin())->getType()));
+     } else {
+       ConstantInt *sign = dyn_cast<ConstantInt>(AI);
+       GBE_ASSERT(sign);
+@@ -4466,9 +4486,9 @@
+     GBE_ASSERT(AI == AE);
+   }
+ 
+-  void GenWriter::emitBlockReadWriteMemInst(CallInst &I, CallSite &CS, bool isWrite, uint8_t vec_size, ir::Type type) {
+-    CallSite::arg_iterator AI = CS.arg_begin();
+-    CallSite::arg_iterator AE = CS.arg_end();
++  void GenWriter::emitBlockReadWriteMemInst(CallInst &I, CallBase &CB, bool isWrite, uint8_t vec_size, ir::Type type) {
++    auto AI = CB.arg_begin();
++    auto AE = CB.arg_end();
+     GBE_ASSERT(AI != AE);
+ 
+     Value *llvmPtr = *(AI++);
+@@ -4522,9 +4542,9 @@
+     GBE_ASSERT(AI == AE);
+   }
+ 
+-  void GenWriter::emitBlockReadWriteImageInst(CallInst &I, CallSite &CS, bool isWrite, uint8_t vec_size, ir::Type type) {
+-    CallSite::arg_iterator AI = CS.arg_begin();
+-    CallSite::arg_iterator AE = CS.arg_end();
++  void GenWriter::emitBlockReadWriteImageInst(CallInst &I, CallBase &CB, bool isWrite, uint8_t vec_size, ir::Type type) {
++    auto AI = CB.arg_begin();
++    auto AE = CB.arg_end();
+     GBE_ASSERT(AI != AE);
+ 
+     const uint8_t imageID = getImageID(I);
+@@ -4557,7 +4577,7 @@
+ 
+   /* append a new sampler. should be called before any reference to
+    * a sampler_t value. */
+-  uint8_t GenWriter::appendSampler(CallSite::arg_iterator AI) {
++  uint8_t GenWriter::appendSampler(User::op_iterator AI) {
+ #if LLVM_VERSION_MAJOR * 10 + LLVM_VERSION_MINOR >= 40
+     CallInst *TC = dyn_cast<CallInst>(*AI);
+     Constant *CPV = TC ? dyn_cast<Constant>(TC->getOperand(0)) : NULL;
+@@ -4595,10 +4615,10 @@
+         const ir::Function &fn = ctx.getFunction();
+ 
+         // Get the function arguments
+-        CallSite CS(&I);
+-        CallSite::arg_iterator AI = CS.arg_begin();
++        CallBase &CB(I);
++        auto AI = CB.arg_begin();
+ #if GBE_DEBUG
+-        CallSite::arg_iterator AE = CS.arg_end();
++        auto AE = CB.arg_end();
+ #endif /* GBE_DEBUG */
+         switch (F->getIntrinsicID()) {
+           case Intrinsic::stacksave:
+@@ -4764,17 +4784,17 @@
+             ctx.MAD(srcType, dst, src0, src1, src2);
+           }
+           break;
+-          case Intrinsic::sqrt: this->emitUnaryCallInst(I,CS,ir::OP_SQR); break;
+-          case Intrinsic::ceil: this->emitRoundingCallInst(I,CS,ir::OP_RNDU); break;
+-          case Intrinsic::trunc: this->emitRoundingCallInst(I,CS,ir::OP_RNDZ); break;
+-          case Intrinsic::rint: this->emitRoundingCallInst(I,CS,ir::OP_RNDE); break;
+-          case Intrinsic::floor: this->emitRoundingCallInst(I,CS,ir::OP_RNDD); break;
+-          case Intrinsic::sin: this->emitUnaryCallInst(I,CS,ir::OP_SIN); break;
+-          case Intrinsic::cos: this->emitUnaryCallInst(I,CS,ir::OP_COS); break;
+-          case Intrinsic::log2: this->emitUnaryCallInst(I,CS,ir::OP_LOG); break;
+-          case Intrinsic::exp2: this->emitUnaryCallInst(I,CS,ir::OP_EXP); break;
++          case Intrinsic::sqrt: this->emitUnaryCallInst(I,CB,ir::OP_SQR); break;
++          case Intrinsic::ceil: this->emitRoundingCallInst(I,CB,ir::OP_RNDU); break;
++          case Intrinsic::trunc: this->emitRoundingCallInst(I,CB,ir::OP_RNDZ); break;
++          case Intrinsic::rint: this->emitRoundingCallInst(I,CB,ir::OP_RNDE); break;
++          case Intrinsic::floor: this->emitRoundingCallInst(I,CB,ir::OP_RNDD); break;
++          case Intrinsic::sin: this->emitUnaryCallInst(I,CB,ir::OP_SIN); break;
++          case Intrinsic::cos: this->emitUnaryCallInst(I,CB,ir::OP_COS); break;
++          case Intrinsic::log2: this->emitUnaryCallInst(I,CB,ir::OP_LOG); break;
++          case Intrinsic::exp2: this->emitUnaryCallInst(I,CB,ir::OP_EXP); break;
+           case Intrinsic::bswap:
+-            this->emitUnaryCallInst(I,CS,ir::OP_BSWAP, getUnsignedType(ctx, I.getType())); break;
++            this->emitUnaryCallInst(I,CB,ir::OP_BSWAP, getUnsignedType(ctx, I.getType())); break;
+           case Intrinsic::pow:
+           {
+             const ir::Register src0 = this->getRegister(*AI); ++AI;
+@@ -4794,21 +4814,26 @@
+         }
+       } else {
+         // Get the name of the called function and handle it
++#if LLVM_VERSION_MAJOR >= 11
++        Value *Callee = I.getCalledOperand();
++        const std::string fnName = Callee->stripPointerCasts()->getName().str();
++#else
+         Value *Callee = I.getCalledValue();
+         const std::string fnName = Callee->stripPointerCasts()->getName();
++#endif
+         auto genIntrinsicID = intrinsicMap.find(fnName);
+ 
+         // Get the function arguments
+-        CallSite CS(&I);
+-        CallSite::arg_iterator AI = CS.arg_begin();
++        CallBase &CB(I);
++        auto AI = CB.arg_begin();
+ #if GBE_DEBUG
+-        CallSite::arg_iterator AE = CS.arg_end();
++        auto AE = CB.arg_end();
+ #endif /* GBE_DEBUG */
+ 
+         switch (genIntrinsicID) {
+-          case GEN_OCL_FBH: this->emitUnaryCallInst(I,CS,ir::OP_FBH, ir::TYPE_U32); break;
+-          case GEN_OCL_FBL: this->emitUnaryCallInst(I,CS,ir::OP_FBL, ir::TYPE_U32); break;
+-          case GEN_OCL_CBIT: this->emitUnaryCallInst(I,CS,ir::OP_CBIT, getUnsignedType(ctx, (*AI)->getType())); break;
++          case GEN_OCL_FBH: this->emitUnaryCallInst(I,CB,ir::OP_FBH, ir::TYPE_U32); break;
++          case GEN_OCL_FBL: this->emitUnaryCallInst(I,CB,ir::OP_FBL, ir::TYPE_U32); break;
++          case GEN_OCL_CBIT: this->emitUnaryCallInst(I,CB,ir::OP_CBIT, getUnsignedType(ctx, (*AI)->getType())); break;
+           case GEN_OCL_ABS:
+           {
+             const ir::Register src = this->getRegister(*AI);
+@@ -4915,8 +4940,8 @@
+             ctx.REGION(dst, src, x.getIntegerValue());
+             break;
+           }
+-          case GEN_OCL_RSQ: this->emitUnaryCallInst(I,CS,ir::OP_RSQ); break;
+-          case GEN_OCL_RCP: this->emitUnaryCallInst(I,CS,ir::OP_RCP); break;
++          case GEN_OCL_RSQ: this->emitUnaryCallInst(I,CB,ir::OP_RSQ); break;
++          case GEN_OCL_RCP: this->emitUnaryCallInst(I,CB,ir::OP_RCP); break;
+           case GEN_OCL_FORCE_SIMD8: ctx.setSimdWidth(8); break;
+           case GEN_OCL_FORCE_SIMD16: ctx.setSimdWidth(16); break;
+           case GEN_OCL_LBARRIER: ctx.SYNC(ir::syncLocalBarrier); break;
+@@ -4947,31 +4972,31 @@
+             break;
+           }
+           case GEN_OCL_ATOMIC_ADD0:
+-          case GEN_OCL_ATOMIC_ADD1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_ADD); break;
++          case GEN_OCL_ATOMIC_ADD1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_ADD); break;
+           case GEN_OCL_ATOMIC_SUB0:
+-          case GEN_OCL_ATOMIC_SUB1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_SUB); break;
++          case GEN_OCL_ATOMIC_SUB1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_SUB); break;
+           case GEN_OCL_ATOMIC_AND0:
+-          case GEN_OCL_ATOMIC_AND1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_AND); break;
++          case GEN_OCL_ATOMIC_AND1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_AND); break;
+           case GEN_OCL_ATOMIC_OR0:
+-          case GEN_OCL_ATOMIC_OR1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_OR); break;
++          case GEN_OCL_ATOMIC_OR1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_OR); break;
+           case GEN_OCL_ATOMIC_XOR0:
+-          case GEN_OCL_ATOMIC_XOR1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_XOR); break;
++          case GEN_OCL_ATOMIC_XOR1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_XOR); break;
+           case GEN_OCL_ATOMIC_XCHG0:
+-          case GEN_OCL_ATOMIC_XCHG1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_XCHG); break;
++          case GEN_OCL_ATOMIC_XCHG1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_XCHG); break;
+           case GEN_OCL_ATOMIC_INC0:
+-          case GEN_OCL_ATOMIC_INC1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_INC); break;
++          case GEN_OCL_ATOMIC_INC1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_INC); break;
+           case GEN_OCL_ATOMIC_DEC0:
+-          case GEN_OCL_ATOMIC_DEC1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_DEC); break;
++          case GEN_OCL_ATOMIC_DEC1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_DEC); break;
+           case GEN_OCL_ATOMIC_UMIN0:
+-          case GEN_OCL_ATOMIC_UMIN1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_UMIN); break;
++          case GEN_OCL_ATOMIC_UMIN1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_UMIN); break;
+           case GEN_OCL_ATOMIC_UMAX0:
+-          case GEN_OCL_ATOMIC_UMAX1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_UMAX); break;
++          case GEN_OCL_ATOMIC_UMAX1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_UMAX); break;
+           case GEN_OCL_ATOMIC_IMIN0:
+-          case GEN_OCL_ATOMIC_IMIN1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_IMIN); break;
++          case GEN_OCL_ATOMIC_IMIN1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_IMIN); break;
+           case GEN_OCL_ATOMIC_IMAX0:
+-          case GEN_OCL_ATOMIC_IMAX1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_IMAX); break;
++          case GEN_OCL_ATOMIC_IMAX1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_IMAX); break;
+           case GEN_OCL_ATOMIC_CMPXCHG0:
+-          case GEN_OCL_ATOMIC_CMPXCHG1: this->emitAtomicInst(I,CS,ir::ATOMIC_OP_CMPXCHG); break;
++          case GEN_OCL_ATOMIC_CMPXCHG1: this->emitAtomicInst(I,CB,ir::ATOMIC_OP_CMPXCHG); break;
+           case GEN_OCL_GET_IMAGE_WIDTH:
+           case GEN_OCL_GET_IMAGE_HEIGHT:
+           case GEN_OCL_GET_IMAGE_DEPTH:
+@@ -5429,48 +5454,48 @@
+             ctx.WAIT();
+             break;
+           }
+-          case GEN_OCL_WORK_GROUP_ALL: this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_ALL); break;
+-          case GEN_OCL_WORK_GROUP_ANY: this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_ANY); break;
++          case GEN_OCL_WORK_GROUP_ALL: this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_ALL); break;
++          case GEN_OCL_WORK_GROUP_ANY: this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_ANY); break;
+           case GEN_OCL_WORK_GROUP_BROADCAST:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_BROADCAST); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_BROADCAST); break;
+           case GEN_OCL_WORK_GROUP_REDUCE_ADD:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_REDUCE_ADD); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_REDUCE_ADD); break;
+           case GEN_OCL_WORK_GROUP_REDUCE_MAX:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_REDUCE_MAX); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_REDUCE_MAX); break;
+           case GEN_OCL_WORK_GROUP_REDUCE_MIN:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_REDUCE_MIN); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_REDUCE_MIN); break;
+           case GEN_OCL_WORK_GROUP_SCAN_EXCLUSIVE_ADD:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_EXCLUSIVE_ADD); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_EXCLUSIVE_ADD); break;
+           case GEN_OCL_WORK_GROUP_SCAN_EXCLUSIVE_MAX:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_EXCLUSIVE_MAX); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_EXCLUSIVE_MAX); break;
+           case GEN_OCL_WORK_GROUP_SCAN_EXCLUSIVE_MIN:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_EXCLUSIVE_MIN); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_EXCLUSIVE_MIN); break;
+           case GEN_OCL_WORK_GROUP_SCAN_INCLUSIVE_ADD:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_INCLUSIVE_ADD); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_INCLUSIVE_ADD); break;
+           case GEN_OCL_WORK_GROUP_SCAN_INCLUSIVE_MAX:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_INCLUSIVE_MAX); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_INCLUSIVE_MAX); break;
+           case GEN_OCL_WORK_GROUP_SCAN_INCLUSIVE_MIN:
+-            this->emitWorkGroupInst(I, CS, ir::WORKGROUP_OP_INCLUSIVE_MIN); break;
++            this->emitWorkGroupInst(I, CB, ir::WORKGROUP_OP_INCLUSIVE_MIN); break;
+           case GEN_OCL_SUB_GROUP_BROADCAST:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_BROADCAST); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_BROADCAST); break;
+           case GEN_OCL_SUB_GROUP_REDUCE_ADD:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_REDUCE_ADD); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_REDUCE_ADD); break;
+           case GEN_OCL_SUB_GROUP_REDUCE_MAX:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_REDUCE_MAX); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_REDUCE_MAX); break;
+           case GEN_OCL_SUB_GROUP_REDUCE_MIN:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_REDUCE_MIN); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_REDUCE_MIN); break;
+           case GEN_OCL_SUB_GROUP_SCAN_EXCLUSIVE_ADD:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_EXCLUSIVE_ADD); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_EXCLUSIVE_ADD); break;
+           case GEN_OCL_SUB_GROUP_SCAN_EXCLUSIVE_MAX:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_EXCLUSIVE_MAX); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_EXCLUSIVE_MAX); break;
+           case GEN_OCL_SUB_GROUP_SCAN_EXCLUSIVE_MIN:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_EXCLUSIVE_MIN); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_EXCLUSIVE_MIN); break;
+           case GEN_OCL_SUB_GROUP_SCAN_INCLUSIVE_ADD:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_INCLUSIVE_ADD); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_INCLUSIVE_ADD); break;
+           case GEN_OCL_SUB_GROUP_SCAN_INCLUSIVE_MAX:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_INCLUSIVE_MAX); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_INCLUSIVE_MAX); break;
+           case GEN_OCL_SUB_GROUP_SCAN_INCLUSIVE_MIN:
+-            this->emitSubGroupInst(I, CS, ir::WORKGROUP_OP_INCLUSIVE_MIN); break;
++            this->emitSubGroupInst(I, CB, ir::WORKGROUP_OP_INCLUSIVE_MIN); break;
+           case GEN_OCL_LRP:
+           {
+             const ir::Register dst  = this->getRegister(&I);
+@@ -5484,69 +5509,69 @@
+             break;
+           }
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_MEM:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 1); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 1); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_MEM2:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 2); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 2); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_MEM4:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 4); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 4); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_MEM8:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 8); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 8); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_MEM:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 1); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 1); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_MEM2:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 2); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 2); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_MEM4:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 4); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 4); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_MEM8:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 8); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 8); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_IMAGE:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 1); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 1); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_IMAGE2:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 2); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 2); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_IMAGE4:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 4); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 4); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_UI_IMAGE8:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 8); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 8); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_IMAGE:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 1); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 1); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_IMAGE2:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 2); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 2); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_IMAGE4:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 4); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 4); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_UI_IMAGE8:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 8); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 8); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_MEM:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 1, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 1, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_MEM2:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 2, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 2, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_MEM4:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 4, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 4, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_MEM8:
+-            this->emitBlockReadWriteMemInst(I, CS, false, 8, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, false, 8, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_MEM:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 1, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 1, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_MEM2:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 2, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 2, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_MEM4:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 4, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 4, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_MEM8:
+-            this->emitBlockReadWriteMemInst(I, CS, true, 8, ir::TYPE_U16); break;
++            this->emitBlockReadWriteMemInst(I, CB, true, 8, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_IMAGE:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 1, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 1, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_IMAGE2:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 2, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 2, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_IMAGE4:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 4, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 4, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_READ_US_IMAGE8:
+-            this->emitBlockReadWriteImageInst(I, CS, false, 8, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, false, 8, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_IMAGE:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 1, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 1, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_IMAGE2:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 2, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 2, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_IMAGE4:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 4, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 4, ir::TYPE_U16); break;
+           case GEN_OCL_SUB_GROUP_BLOCK_WRITE_US_IMAGE8:
+-            this->emitBlockReadWriteImageInst(I, CS, true, 8, ir::TYPE_U16); break;
++            this->emitBlockReadWriteImageInst(I, CB, true, 8, ir::TYPE_U16); break;
+           case GEN_OCL_GET_PIPE:
+           case GEN_OCL_MAKE_RID:
+           case GEN_OCL_GET_RID:
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_passes.cpp.orig	2021-05-16 18:47:43.440592235 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_passes.cpp	2021-05-17 17:21:48.197118282 +0200
+@@ -94,7 +94,12 @@
+   {
+     switch (Ty->getTypeID()) {
+       case Type::VoidTyID: NOT_SUPPORTED;
++#if LLVM_VERSION_MAJOR >= 11
++      case Type::FixedVectorTyID:
++      case Type::ScalableVectorTyID:
++#else
+       case Type::VectorTyID:
++#endif
+       {
+         const VectorType* VecTy = cast<VectorType>(Ty);
+         uint32_t elemNum = VecTy->getNumElements();
+@@ -138,7 +143,12 @@
+       case Type::HalfTyID:    return 16;
+       case Type::FloatTyID:   return 32;
+       case Type::DoubleTyID:  return 64;
++#if LLVM_VERSION_MAJOR >= 11
++      case Type::FixedVectorTyID:
++      case Type::ScalableVectorTyID:
++#else
+       case Type::VectorTyID:
++#endif
+       {
+         const VectorType* VecTy = cast<VectorType>(Ty);
+         uint32_t numElem = VecTy->getNumElements();
+@@ -184,10 +194,19 @@
+     Type *elementType = NULL;
+     if (PointerType* ptrType = dyn_cast<PointerType>(eltTy))
+       elementType = ptrType->getElementType();
++#if LLVM_VERSION_MAJOR >= 11
++    else if(ArrayType * arrType = dyn_cast<ArrayType>(eltTy))
++      elementType = arrType->getElementType();
++    else if(VectorType * vecType = dyn_cast<VectorType>(eltTy))
++      elementType = vecType->getElementType();
++    else if(StructType *strType = dyn_cast<StructType>(eltTy))
++      elementType = strType->getElementType(index);
++#else
+     else if(SequentialType * seqType = dyn_cast<SequentialType>(eltTy))
+       elementType = seqType->getElementType();
+     else if(CompositeType * compTy= dyn_cast<CompositeType>(eltTy))
+       elementType = compTy->getTypeAtIndex(index);
++#endif
+     GBE_ASSERT(elementType);
+     return elementType;
+   }
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_scalarize.cpp.orig	2021-05-16 18:47:43.443925550 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_scalarize.cpp	2021-05-18 18:27:01.084518052 +0200
+@@ -178,7 +178,12 @@
+       if(!type)
+         return type;
+       switch(type->getTypeID()) {
++#if LLVM_VERSION_MAJOR >= 11
++      case Type::FixedVectorTyID:
++      case Type::ScalableVectorTyID:
++#else
+       case Type::VectorTyID:
++#endif
+       case Type::ArrayTyID:
+         return GetBasicType(type->getContainedType(0));
+       default:
+@@ -188,8 +193,13 @@
+     }
+ 
+     int GetComponentCount(const Type* type)  {
++#if LLVM_VERSION_MAJOR >= 11
++      if (type && (type->getTypeID() == Type::FixedVectorTyID || type->getTypeID() == Type::ScalableVectorTyID))
++        return llvm::dyn_cast<VectorType>(type)->getNumElements();
++#else
+       if (type && type->getTypeID() == Type::VectorTyID)
+         return llvm::dyn_cast<VectorType>(type)->getNumElements();
++#endif
+       else
+         return 1;
+     }
+@@ -652,13 +662,18 @@
+           break;
+         }
+       } else {
++#if LLVM_VERSION_MAJOR >= 11
++        Value *Callee = call->getCalledOperand();
++        const std::string fnName = Callee->getName().str();
++#else
+         Value *Callee = call->getCalledValue();
+         const std::string fnName = Callee->getName();
++#endif
+         auto genIntrinsicID = intrinsicMap.find(fnName);
+ 
+         // Get the function arguments
+-        CallSite CS(call);
+-        CallSite::arg_iterator CI = CS.arg_begin() + 1;
++        CallBase &CB(*call);
++        auto CI = CB.arg_begin() + 1;
+ 
+         switch (genIntrinsicID) {
+           case GEN_OCL_NOT_FOUND:
+@@ -729,7 +744,7 @@
+             extractFromVector(call);
+             break;
+           case GEN_OCL_PRINTF:
+-            for (; CI != CS.arg_end(); ++CI)
++            for (; CI != CB.arg_end(); ++CI)
+               if ((*CI)->getType()->isVectorTy())
+                 *CI = InsertToVector(call, *CI);
+             break;
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_printf_parser.cpp.orig	2017-10-24 08:04:48.000000000 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_printf_parser.cpp	2021-05-18 19:37:42.918204733 +0200
+@@ -323,8 +323,8 @@
+ 
+   bool PrintfParser::parseOnePrintfInstruction(CallInst * call)
+   {
+-    CallSite CS(call);
+-    CallSite::arg_iterator CI_FMT = CS.arg_begin();
++    CallBase &CB(*call);
++    auto CI_FMT = CB.arg_begin();
+     int param_num = 0;
+ 
+     llvm::Constant* arg0 = dyn_cast<llvm::ConstantExpr>(*CI_FMT);
+@@ -341,7 +341,7 @@
+       return false;
+     }
+ 
+-    std::string fmt = fmt_arg->getAsCString();
++    std::string fmt = fmt_arg->getAsCString().str();
+     if (fmt.size() == 0)
+       return false;
+ 
+@@ -437,8 +437,13 @@
+         if ( callFunc->getIntrinsicID() != 0)
+           continue;
+ 
++#if LLVM_VERSION_MAJOR >= 11
++        Value *Callee = call->getCalledOperand();
++        const std::string fnName = Callee->getName().str();
++#else
+         Value *Callee = call->getCalledValue();
+         const std::string fnName = Callee->getName();
++#endif
+ 
+         if (fnName != "__gen_ocl_printf_stub" && fnName != "__gen_ocl_puts_stub")
+           continue;
+@@ -582,7 +587,7 @@
+             if (!fmt_arg || !fmt_arg->isCString()) {
+               return false;
+             }
+-            slot.state.str = fmt_arg->getAsCString();
++            slot.state.str = fmt_arg->getAsCString().str();
+             return true;
+           }
+           case PRINTF_CONVERSION_P: {
+@@ -595,10 +600,18 @@
+ 
+         break;
+ 
++#if LLVM_VERSION_MAJOR >= 11
++      case Type::FixedVectorTyID:
++      case Type::ScalableVectorTyID: {
++        Type* vect_type = arg->getType();
++        Type* elt_type = cast<VectorType>(vect_type)->getElementType();
++        int vec_num = cast<VectorType>(vect_type)->getNumElements();
++#else
+       case Type::VectorTyID: {
+         Type* vect_type = arg->getType();
+         Type* elt_type = vect_type->getVectorElementType();
+         int vec_num = vect_type->getVectorNumElements();
++#endif
+         bool sign = false;
+ 
+         if (vec_num != slot.state.vector_n) {
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_profiling.cpp.orig	2021-05-16 18:47:43.413925712 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_profiling.cpp	2021-05-18 19:43:54.136193672 +0200
+@@ -35,7 +35,11 @@
+ #include "llvm/IR/IRBuilder.h"
+ 
+ #if LLVM_VERSION_MAJOR * 10 + LLVM_VERSION_MINOR >= 35
++#if LLVM_VERSION_MAJOR >= 11
++#include "llvm/IR/AbstractCallSite.h"
++#else
+ #include "llvm/IR/CallSite.h"
++#endif
+ #include "llvm/IR/CFG.h"
+ #else
+ #include "llvm/Support/CallSite.h"
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_device_enqueue.cpp.orig	2021-05-18 19:47:35.171662887 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_device_enqueue.cpp	2021-05-18 20:01:28.610481095 +0200
+@@ -45,7 +45,7 @@
+       return NULL;
+ 
+     /* This is a fake, to check the function bitcast is for block or not */
+-    std::string fnName = Fn->getName();
++    std::string fnName = Fn->getName().str();
+     if(fnName.find("_invoke") == std::string::npos)
+       return NULL;
+ 
+@@ -124,7 +124,7 @@
+ 
+     Function::arg_iterator NewFnArgIt = NewFn->arg_begin();
+     for (Function::arg_iterator I = Fn->arg_begin(), E = Fn->arg_end(); I != E; ++I) {
+-      std::string ArgName = I->getName();
++      std::string ArgName = I->getName().str();
+       NewFnArgIt->setName(ArgName);
+       VMap[&*I] = &(*NewFnArgIt++);
+     }
+@@ -198,7 +198,7 @@
+            * invoke pointer to store the index in the unit's block functions index.*/
+           Function *Fn = dyn_cast<Function>(bt->getOperand(0));
+ 
+-          std::string fnName = Fn->getName();
++          std::string fnName = Fn->getName().str();
+           int index = -1;
+           for(size_t i=0; i<unit.blockFuncs.size(); i++) {
+             if(unit.blockFuncs[i] == fnName) {
+@@ -241,7 +241,11 @@
+             //unnamed call function, parse the use to find the define of called function
+             SmallVector<Value*, 16> args(CI->op_begin(), CI->op_end()-1);
+ 
++#if LLVM_VERSION_MAJOR >= 11
++            Value *v = CI->getCalledOperand();
++#else
+             Value *v = CI->getCalledValue();
++#endif
+             BitCastInst* bt = dyn_cast<BitCastInst>(v);
+             if(bt == NULL)
+               continue;
+@@ -316,7 +320,7 @@
+                   ConstantExpr *expr = dyn_cast<ConstantExpr>(c->getOperand(3));
+                   BitCastInst *bt = dyn_cast<BitCastInst>(expr->getAsInstruction());
+                   Function* f = dyn_cast<Function>(bt->getOperand(0));
+-                  blocks[v] = f->getName();
++                  blocks[v] = f->getName().str();
+                 }
+               }
+ 
+@@ -361,7 +365,7 @@
+                   ConstantExpr *expr = dyn_cast<ConstantExpr>(c->getOperand(3));
+                   BitCastInst *bt = dyn_cast<BitCastInst>(expr->getAsInstruction());
+                   Function* f = dyn_cast<Function>(bt->getOperand(0));
+-                  blocks[v] = f->getName();
++                  blocks[v] = f->getName().str();
+                 }
+               }
+             } else if(isa<AllocaInst>(block)) {
+--- Beignet-1.3.2-Source/backend/src/llvm/StripAttributes.cpp.orig	2017-10-24 08:04:48.000000000 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/StripAttributes.cpp	2021-05-18 20:52:53.147104059 +0200
+@@ -107,9 +107,9 @@
+        BB != E; ++BB) {
+     for (BasicBlock::iterator Inst = BB->begin(), E = BB->end();
+          Inst != E; ++Inst) {
+-      CallSite Call(&*Inst);
++      auto *Call = dyn_cast<CallBase>(&*Inst);
+       if (Call)
+-        Call.setCallingConv(CallingConv::C);
++        Call->setCallingConv(CallingConv::C);
+     }
+   }
+ 
+--- Beignet-1.3.2-Source/backend/src/llvm/llvm_loadstore_optimization.cpp.orig	2021-05-16 18:47:43.440592235 +0200
++++ Beignet-1.3.2-Source/backend/src/llvm/llvm_loadstore_optimization.cpp	2021-05-18 21:34:07.053701756 +0200
+@@ -154,8 +154,10 @@
+     LoadInst *ld = cast<LoadInst>(merged[0]);
+ #if LLVM_VERSION_MAJOR < 10
+     unsigned align = ld->getAlignment();
+-#else
++#elif LLVM_VERSION_MAJOR < 11
+     MaybeAlign align = ld->getAlign();
++#else
++    Align align = ld->getAlign();
+ #endif
+     unsigned addrSpace = ld->getPointerAddressSpace();
+     // insert before first load
+@@ -241,8 +243,10 @@
+ 
+ #if LLVM_VERSION_MAJOR < 10
+     unsigned align = st->getAlignment();
+-#else
++#elif LLVM_VERSION_MAJOR < 11
+     MaybeAlign align = st->getAlign();
++#else
++    Align align = st->getAlign();
+ #endif
+     // insert before the last store
+     Builder.SetInsertPoint(merged[size-1]);
+--- Beignet-1.3.2-Source/CMake/FindLLVM.cmake.orig	2021-05-16 18:47:43.403925767 +0200
++++ Beignet-1.3.2-Source/CMake/FindLLVM.cmake	2021-05-19 06:34:06.278180089 +0200
+@@ -109,6 +109,8 @@
+ )
+ if (LLVM_SYSTEM_LIBS_ORIG)
+ string(REGEX REPLACE " *\n" "" LLVM_SYSTEM_LIBS ${LLVM_SYSTEM_LIBS_ORIG})
++else (LLVM_SYSTEM_LIBS_ORIG)
++set(LLVM_SYSTEM_LIBS tinfo z)
+ endif (LLVM_SYSTEM_LIBS_ORIG)
+ endif (LLVM_VERSION_NODOT VERSION_GREATER 34)
+ 

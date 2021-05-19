@@ -10,6 +10,7 @@ Source0:	https://01.org/sites/default/files/beignet-%{version}-source.tar.gz
 # Source0-md5:	a577ab18d67a891c8767b8ea62253543
 Patch0:		cflags.patch
 Patch1:		static_llvm.patch
+Patch2:		%{name}-llvm11-support.patch
 # Debian patches
 Patch10:	%{name}-reduce-notfound-output.patch
 Patch11:	%{name}-update-docs.patch
@@ -98,6 +99,7 @@ poleceń, jądra i programów oraz uruchamia je na GPU.
 %patch27 -p1
 %patch28 -p1
 %patch29 -p1
+%patch2 -p1
 
 # don't lower default -std= on g++ 5+ (recent llvm requires C++14)
 %if "%{_ver_ge '%{cxx_version}' '5.0'}" == "1"
